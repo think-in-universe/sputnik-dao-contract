@@ -16,6 +16,11 @@ jobs:
         with:
           toolchain: stable
           target: wasm32-unknown-unknown
+      - name: Setup dependencies
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          brew install llvm@14
+          echo /usr/local/opt/llvm@14/bin >> $GITHUB_PATH
       - name: Build
         env:
           IS_GITHUB_ACTION: true
