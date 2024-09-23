@@ -1,26 +1,29 @@
 import {
-    Workspace,
     BN,
     NearAccount,
     captureError,
     toYocto,
     tGas,
     DEFAULT_FUNCTION_CALL_GAS,
-} from 'near-workspaces-ava';
+} from 'near-workspaces';
 import {
     initStaking,
     initTestToken,
     STORAGE_PER_BYTE,
     registerAndDelegate,
     setStakingId,
-    workspaceWithoutInit as workspace,
+    initWorkspace,
+    Proposal,
 } from './utils';
 
-workspace.test(
+const test = initWorkspace({ noInit: true });
+
+test(
     'Testing policy TokenWeight',
-    async (test, { alice, root, dao }) => {
+    async (t) => {
+        const { alice, root, dao } = t.context.accounts;
         const config = { name: 'sputnik', purpose: 'testing', metadata: '' };
-        const bob = await root.createAccount('bob');
+        const bob = await root.createSubAccount('bob');
         const period = new BN('1000000000')
             .muln(60)
             .muln(60)
@@ -103,11 +106,12 @@ workspace.test(
             id: proposalId,
             action: 'VoteApprove',
         });
-        test.deepEqual(await dao.view('get_config'), new_config);
+        t.deepEqual(await dao.view('get_config'), new_config);
     },
 );
 
-workspace.test('Policy self-lock', async (test, { alice, root, dao }) => {
+test('Policy self-lock', async (t) => {
+    const { alice, root, dao } = t.context.accounts;
     const config = { name: 'sputnik', purpose: 'testing', metadata: '' };
     const period = new BN('1000000000')
         .muln(60)
@@ -157,6 +161,6 @@ workspace.test('Policy self-lock', async (test, { alice, root, dao }) => {
         id: proposalId,
         action: 'VoteApprove',
     });
-    let { status } = await dao.view('get_proposal', { id: proposalId });
-    test.is(status, 'InProgress');
+    let { status } : Proposal = await dao.view('get_proposal', { id: proposalId });
+    t.is(status, 'InProgress');
 });
