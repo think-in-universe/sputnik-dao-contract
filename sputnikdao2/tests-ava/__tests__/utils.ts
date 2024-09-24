@@ -1,5 +1,6 @@
-import { Worker, NearAccount, BN, toYocto, tGas } from 'near-workspaces';
+import { Worker, NearAccount, BN, toYocto, tGas, KeyPair } from 'near-workspaces';
 import anyTest, { TestFn } from 'ava';
+import * as fs from 'fs';
 
 export async function deployAndInit({
     root,
@@ -14,6 +15,11 @@ export async function deployAndInit({
     init?: {
         methodName: string;
         args?: Record<string, unknown>;
+        options?: {
+            gas?: string | BN;
+            attachedDeposit?: string | BN;
+            signWithKey?: KeyPair;
+        }
     };
     initialBalance?: string;
 }): Promise<NearAccount> {
@@ -25,12 +31,12 @@ export async function deployAndInit({
         throw result.Failure;
     }
     if (init) {
-        await contract.call(contract, init.methodName, init.args ?? {});
+        await contract.call(contract, init.methodName, init.args ?? {}, init.options);
     }
     return contract;
 }
 
-export function initWorkspace(options?: { noInit?: boolean, factory?: boolean}) {
+export function initWorkspace(options?: { skipInit?: boolean, factory?: boolean}) {
     const test = anyTest as TestFn<{
         worker: Worker;
         accounts: Record<string, NearAccount>;
@@ -53,10 +59,10 @@ export function initWorkspace(options?: { noInit?: boolean, factory?: boolean}) 
             root,
             subContractId: 'dao',
             code: '../res/sputnikdao2.wasm',
-            init: !options?.noInit ? {
+            init: options?.skipInit ? undefined : {
                 methodName: 'new',
                 args: { config, policy },
-            } : undefined,
+            },
             initialBalance: toYocto('200'),
         });
 
@@ -67,6 +73,9 @@ export function initWorkspace(options?: { noInit?: boolean, factory?: boolean}) 
             init: {
                 methodName: 'new',
                 args: {},
+                options: {
+                    gas: tGas(300),
+                },
             }, // 300 Tags
             initialBalance: toYocto('500'),
         }) : undefined;
@@ -81,7 +90,7 @@ export function initWorkspace(options?: { noInit?: boolean, factory?: boolean}) 
         };
     });
 
-    test.afterEach(async (t) => {
+    test.afterEach.always(async (t) => {
         // Stop Sandbox server
         await t.context.worker.tearDown().catch((error) => {
             console.log('Failed to stop the Sandbox:', error);
@@ -154,6 +163,7 @@ export async function setStakingId(
 }
 
 export const regCost = STORAGE_PER_BYTE.mul(new BN(16));
+export const DAO_WASM_BYTES: Uint8Array = fs.readFileSync('../res/sputnikdao2.wasm');
 
 export async function registerAndDelegate(
     dao: NearAccount,

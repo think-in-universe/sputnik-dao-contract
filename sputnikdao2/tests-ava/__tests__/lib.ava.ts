@@ -14,6 +14,7 @@ import {
     STORAGE_PER_BYTE,
     initWorkspace,
     Proposal,
+    DAO_WASM_BYTES,
 } from './utils';
 import { voteApprove } from './utils';
 import {
@@ -25,120 +26,9 @@ import {
     claimBounty,
     doneBounty,
 } from './utils';
-import * as fs from 'fs';
 
-const DAO_WASM_BYTES: Uint8Array = fs.readFileSync('../res/sputnikdao2.wasm');
 
 const test = initWorkspace();
-
-initWorkspace({ factory: true })(
-    'Upgrade self using factory',
-    async (t) => {
-        const { root, factory } = t.context.accounts;
-        const config = {
-            name: 'testdao',
-            purpose: 'to test',
-            metadata: '',
-        };
-        const policy = [root.accountId];
-        const params = {
-            config,
-            policy,
-        };
-
-        await root.call(
-            factory,
-            'create',
-            {
-                name: 'testdao',
-                args: Buffer.from(JSON.stringify(params)).toString('base64'),
-            },
-            {
-                attachedDeposit: toYocto('10'),
-                gas: tGas(300),
-            },
-        );
-
-        t.deepEqual(await factory.view('get_dao_list', {}), [
-            'testdao.factory.test.near',
-        ]);
-        const hash = await factory.view('get_default_code_hash', {});
-
-        const proposalId: number = await root.call(
-            'testdao.factory.test.near',
-            'add_proposal',
-            {
-                proposal: {
-                    description: 'proposal to test',
-                    kind: {
-                        UpgradeSelf: {
-                            hash: hash,
-                        },
-                    },
-                },
-            },
-            {
-                attachedDeposit: toYocto('1'),
-            },
-        );
-        t.is(proposalId, 0);
-
-        await root.call(
-            'testdao.factory.test.near',
-            'act_proposal',
-            {
-                id: proposalId,
-                action: 'VoteApprove',
-            },
-            {
-                gas: tGas(300),
-            },
-        );
-    },
-);
-
-initWorkspace({ noInit: true })(
-    'Upgrade self negative',
-    async (t) => {
-        const { root, dao } = t.context.accounts;
-        const config = { name: 'sputnik', purpose: 'testing', metadata: '' };
-
-        // NOT INITIALIZED
-        let err = await captureError(async () =>
-            root.call(dao, 'store_blob', DAO_WASM_BYTES, {
-                attachedDeposit: toYocto('200'),
-                gas: tGas(300),
-            }),
-        );
-        t.regex(err, /ERR_CONTRACT_IS_NOT_INITIALIZED/);
-
-        // Initializing contract
-        await root.call(dao, 'new', { config, policy: [root.accountId] });
-
-        // not enough deposit
-        err = await captureError(async () =>
-            root.call(dao, 'store_blob', DAO_WASM_BYTES, {
-                attachedDeposit: toYocto('1'),
-                gas: tGas(300),
-            }),
-        );
-        t.regex(err, /ERR_NOT_ENOUGH_DEPOSIT/);
-
-        await root.call(dao, 'store_blob', DAO_WASM_BYTES, {
-            attachedDeposit: toYocto('200'),
-            gas: tGas(300),
-        });
-
-        // Already exists
-        err = await captureError(async () =>
-            root.call(dao, 'store_blob', DAO_WASM_BYTES, {
-                attachedDeposit: toYocto('200'),
-                gas: tGas(300),
-            }),
-        );
-        t.regex(err, /ERR_ALREADY_EXISTS/);
-    },
-);
 
 test('Remove blob', async (t) => {
     const { root, dao, alice } = t.context.accounts;

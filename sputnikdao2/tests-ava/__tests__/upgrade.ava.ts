@@ -8,6 +8,7 @@ import { initWorkspace } from './utils';
 // 3. add proposal for remove_contract_self(get it approved)
 // 4. Confirm DAO contract code_hash and returned balance
 
+// Set up workspace with DAO factory contract
 const test = initWorkspace({ factory: true });
 
 test('basic', async (t) => {
@@ -273,5 +274,71 @@ test(
         // 4. Confirm DAO contract code_hash and returned balance
         // --------------------------------------------------------------------
         // TODO: Check if balance increased by 6 NEAR for refund
+    },
+);
+
+test(
+    'Upgrade self using factory',
+    async (t) => {
+        const { root, factory } = t.context.accounts;
+        const config = {
+            name: 'testdao',
+            purpose: 'to test',
+            metadata: '',
+        };
+        const policy = [root.accountId];
+        const params = {
+            config,
+            policy,
+        };
+
+        await root.call(
+            factory,
+            'create',
+            {
+                name: 'testdao',
+                args: Buffer.from(JSON.stringify(params)).toString('base64'),
+            },
+            {
+                attachedDeposit: toYocto('10'),
+                gas: tGas(300),
+            },
+        );
+
+        t.deepEqual(await factory.view('get_dao_list', {}), [
+            'testdao.factory.test.near',
+        ]);
+        const hash = await factory.view('get_default_code_hash', {});
+
+        const proposalId: number = await root.call(
+            'testdao.factory.test.near',
+            'add_proposal',
+            {
+                proposal: {
+                    description: 'proposal to test',
+                    kind: {
+                        UpgradeSelf: {
+                            hash: hash,
+                        },
+                    },
+                },
+            },
+            {
+                attachedDeposit: toYocto('1'),
+            },
+        );
+        t.is(proposalId, 0);
+
+        await root.call(
+            'testdao.factory.test.near',
+            'act_proposal',
+            {
+                id: proposalId,
+                action: 'VoteApprove',
+            },
+            {
+                gas: tGas(300),
+            },
+        );
     },
 );
